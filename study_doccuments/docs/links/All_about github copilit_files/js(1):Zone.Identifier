@@ -1,0 +1,4 @@
+[ZoneTransfer]
+ZoneId=3
+ReferrerUrl=https://gemini.google.com/
+HostUrl=https://maps.googleapis.com/maps/api/js?libraries=routes&v=quarterly&key=AIzaSyDmUQ6sj3nbs_ZiSsxsbP7L6qlPDT3cr4Q&language=en-US&callback=google.maps.__ib__

@@ -1,0 +1,454 @@
+git push gerrit HEAD:refs/for/boardfarm3
+ 
+git push gerrit HEAD:refs/for/master
+
+
+git push origin HEAD:refs/for/boardfarm3
+
+git push origin HEAD:refs/for/boardfarm3_many_together_test
+
+git remote get-url <gerrit or origin>
+ 
+git remote set-url <gerrit or origin> <new url>
+
+- If your branch is not tracking a remote, you can set it like this:
+
+
+git branch --set-upstream-to=origin/feature-xyz
+
+- Or if you're pushing for the first time:
+
+git push -u origin feature-xyz
+
+check if we are tracking  a remote branch or not 
+
+Method 2: Use git branch -vv
+This shows all local branches and their tracking info:
+
+git branch -vv
+
+or 
+
+git status
+
+=================== TO HARD MATH WTH THE REMOTE REPO =================
+
+git reset --hard origin/main  (or origin/<mycustome> )
+
+==============credential helper example =================
+
+git config --global credential.helper 'cache --timeout=2592000'
+
+
+================== discard cahnges==================
+try to use git rebase --quit if git rebase --abort failed.
+git rebase --quit completely discards the changes.
+
+============== Env generations =================================
+
+python ./scripts/generate_env_json.py --board TG2492LG --software OFW_TG2492LG-2306.14_EU.GW.ATOM.SIP.DEBUG.img --rel_type oem --build_date 2024-01-22
+
+python /home/ahazra/workspace/boardfarm3/boardfarm-lgi-utils/boardfarm_lgi_utils/convert_inventory_v2_to_v3.py --input /home/ahazra/workspace/boardfarm_repos/boardfarm-lgi/ams_silver.json --output /home/ahazra/workspace/boardfarm3/boardfarm-lgi/ams_silver.json
+================================
+
+
+============ syncting and reflecting hte main branch exactly as development branch ==============================================
+
+
+# 1. Backup current main (tag + branch)
+git checkout main
+git tag backup-main-init
+git branch backup/main-init
+git push origin backup/main-init --tags
+
+# 2. Reset main to development
+git reset --hard development
+
+# 3. Push updated main to remote (overwrite old history)
+git push --force-with-lease origin main
+
+# 4. Verify# 4. Verify
+
+Rollback Plan (if anything goes sideways)
+If need to restore the original main:
+
+
+# Fetch everything to ensure you have the backups
+git fetch --all --tags
+
+# Reset main back to the backup commit
+git checkout main
+git reset --hard backup-main-init
+
+## Push rollback to remote
+
+
+Alternative: If you created backup/main-init branch, you can also do:
+
+
+git checkout main
+gitgit reset --hard backup/main-init
+
+
+
+
+
+================SCP========================
+
+scp -P 22 admin@10.64.38.17:/var/tmp/acs_mv2_pcap.pcap .
+
+======================user name passs=========================
+
+ITC
+ 
+http://10.63.72.52/dawn/AXESSGUI/#/login   ITC ACS
+ 
+UPC12345
+ 
+boardfarm
+ 
+http://172.30.144.122/firmware/        --- firmware mirror server for ITC 
+
+
+PDU
+admin
+scripter99
+ 
+Nuc and dell server
+ boardfarm
+BF_prod_ams
+ 
+ 
+ 
+ 
+PDU 2cred
+
+pass :  scripter99
+
+user : admin
+ 
+ 
+ ==============================================================
+ 
+ 
+ =====================some additional informatios ========================
+ 
+ samknows , enabling and getting the unitID/ agent ID 
+ 
+check if samknows is connected  :-  curl -k https://dcs.cloud.samknows.com  - run from arm console
+enable samknows on CPE  : dmcli eRT setv Device.X_LGI-COM_Applications.Speedtest.SamKnows.Enable bool true
+check of the interface eth0.200  , the communication happens via it ,, check in arm/ atom , you will find in one if it 
+ 
+once enabled go to the location below and open the unitid file  to check the unit ID 
+
+ 
+ 
+/var/run/opt/samknows/router_agent
+ 
+ 
+ex :- root@intel_ce_linux:/var/run/opt/samknows/router_agent# cat unitid
+
+29125173root@intel_ce_linux:/var/run/opt/samknows/router_agent#
+ 
+ 
+samknows LG panel page  : https://samknows.one/
+links:
+https://samknows.one/admin/agents
+https://wikiprojects.upc.biz/display/BOARDFARM/How+to+register+CPE+in+SamKnows
+ 
+ 
+ 
+ 
+ 
+ 
+dmcli eRT getv Device.X_LGI-COM_Gateway.ErouterModeControl
+ 
+ 
+ 
+ 
+ 
+grep -ri adminstatus boardfarm3_docsis/configs/mibs/
+ 
+docker exec -it bft-cmts1-router bash
+
+
+===========================  git concepts  =-=========================
+
+
+
+# 1) Update local refs
+git fetch --all --prune
+
+# 2) Inspect differences & ancestry
+git merge-base main development
+git diff --stat main..development
+git log --oneline main..development
+
+# 3) Merge (choose ONE of the below cases)
+
+# Case A: Related histories
+git checkout main
+git pull
+git merge --no-ff development
+
+# Case B: Unrelated histories (if merge-base was empty)
+# git checkout main
+# git pull
+# git merge --no-ff --allow-unrelated-histories development
+
+# 4) Resolve conflicts if any
+# (open files, fix conflicts)
+git add .
+git commit  # finalizes the merge if needed
+
+# 5) Validate build/tests (adjust to your stack)
+# python -m pytest
+# pnpm install
+# pnpm build
+# pnpm test
+
+# 6) Push
+git push origin main
+
+
+
+
+=============================== start cleen =-==================
+
+
+
+# Start clean (abort the current merge if you're in MERGING state)
+git merge --abort 2>/dev/null || true
+
+# Update local refs
+git fetch --all --prune
+
+# Double-check there’s no common ancestor (optional)
+git merge-base main development || echo "No common ancestor"
+
+
+# Switch to main & ensure it’s up to date
+git checkout main
+git pull
+
+
+# Merge, preferring DEVELOPMENT's content wherever there are conflicts
+git merge --no-ff --allow-unrelated-histories -X theirs development
+
+# If any files still show as conflicted (rare, e.g., rename/rename),
+# force "theirs" for everything and commit:
+git checkout --theirs .
+git add -A
+git commit -m "Merge development into main, prefer development on conflicts"
+
+
+# 🔧 Stop tracking .venv (strongly recommended)
+echo ".venv/" >> .gitignore
+git rm -r --cached .venv || true
+git add .gitignore
+git commit -m "Stop tracking virtual environment (.venv)"
+
+# Validate build/tests (adjust to your stack)
+# python -m pytest
+# pnpm install && pnpm build && pnpm test
+
+# Push
+git push origin main
+``
+
+git merge-base main development
+git log --oneline main..development | head -n 20
+git status
+git diff --name-only --diff-filter=U
+
+
+
+============================ git stash ===============================
+
+# 🧾 Git Stash Cheat Sheet
+
+## Basic stash
+git stash
+# → Temporarily saves tracked changes and resets working directory
+
+## Stash with message (RECOMMENDED)
+git stash push -m "WIP: short description"
+# → Stashes changes with a readable identifier
+
+## Stash tracked + untracked files
+git stash push -u -m "WIP: include new files"
+# → Also stashes untracked files
+
+## Stash all files (including ignored)
+git stash push -a -m "WIP: everything"
+# → Stashes all files (use carefully)
+
+## List all stashes
+git stash list
+# → Shows all saved stashes with index and message
+
+## Show stash summary
+git stash show stash@{0}
+# → Shows summary of changes in a stash
+
+## Show full stash diff
+git stash show -p stash@{0}
+# → Shows full diff of a stash
+
+## Apply a stash (keep it)
+git stash apply stash@{0}
+# → Restores stash but keeps it in the stash list
+
+## Apply and delete a stash
+git stash pop stash@{0}
+# → Restores stash and deletes it (most common)
+
+## Stash only specific files
+git stash push -m "WIP: specific files" file1 file2
+# → Stashes only selected files
+
+## Create a branch from a stash
+git stash branch new-branch stash@{0}
+# → Creates a new branch and applies the stash
+
+## Delete a specific stash
+git stash drop stash@{0}
+# → Deletes one stash
+
+## Delete all stashes (DANGER)
+git stash clear
+# → Deletes all stashes permanently
+
+
+
+
+Git Rebase — Quick Reference & Notes
+🔹 What is Rebase?
+
+Rebase = move your commits on top of another branch
+
+“Take my work and replay it as if it was written after the latest changes.”
+
+🔹 When to Use Rebase
+
+✅ Your branch is behind the base branch
+✅ You want a clean, linear history
+✅ You are the only one working on the branch
+❌ Do NOT use on shared branches (main, development)
+
+🔹 Common Scenario
+development:   A---B---C
+my_branch:         D---E
+
+
+After rebase:
+
+development:   A---B---C
+my_branch:             D'---E'
+
+🔹 Basic Rebase Flow (Most Common)
+git checkout development
+git pull origin development
+
+git checkout my_branch
+git rebase development
+
+🔹 After Rebase (IMPORTANT)
+git push --force-with-lease
+
+
+✔ Required because commit history changed
+✔ Safe version of force push
+
+🔹 Handling Conflicts During Rebase
+When conflict occurs:
+git status
+
+Fix files, then:
+git add <file>
+git rebase --continue
+
+Abort rebase:
+git rebase --abort
+
+🔹 Interactive Rebase (Cleanup Commits)
+git rebase -i HEAD~3
+
+
+Common actions:
+
+pick → keep commit
+
+squash → merge into previous commit
+
+reword → change commit message
+
+drop → remove commit
+
+🔹 Rebase vs Merge (Quick Compare)
+Feature	Rebase	Merge
+History	Linear	Branchy
+Merge commit	❌ No	✅ Yes
+Rewrite history	✅ Yes	❌ No
+Needs force push	✅ Yes	❌ No
+Shared branches	❌ No	✅ Yes
+🔹 Safe Force Push Rule
+
+Always use:
+
+git push --force-with-lease
+
+
+❌ Never:
+
+git push --force
+
+🔹 When Rebase is NOT Allowed
+
+🚫 main, master, development
+🚫 Any branch used by multiple people
+
+🔹 Useful Commands
+Task	Command
+Check branch status	git status
+See branch graph	git log --oneline --graph --decorate
+See upstream	git branch -vv
+Rebase onto branch	git rebase branch_name
+Continue rebase	git rebase --continue
+Abort rebase	git rebase --abort
+🔹 Common Errors & Meaning
+“non-fast-forward”
+
+👉 You rebased and need to force push
+
+“stale info”
+
+👉 Someone else pushed — fetch and re-evaluate
+
+🔹 Golden Rules (Memorize These)
+
+1️⃣ Rebase only your own branches
+2️⃣ Always update base branch first
+3️⃣ Always force push with --force-with-lease
+4️⃣ Abort if unsure — nothing is lost
+
+TL;DR
+git checkout development
+git pull
+
+git checkout my_branch
+git rebase development
+git push --force-with-lease
+
+
+If you want, I can:
+
+Convert this to a Markdown file
+
+Make a 1-page printable PDF
+
+Add GitLab-specific notes
+
+Just tell me 👍
+
+Get smarter responses, upload files and images, and more.

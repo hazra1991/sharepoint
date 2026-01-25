@@ -1,0 +1,223 @@
+The Bigger Picture: Django Migrations
+
+Migrations only matter when your app is deployed.
+The database schema in production or development is the source of truth, not the migration files.
+
+Rule of Thumb
+
+Database schema and deployed application models = reality
+Migration files = Django’s memory of reality (this can be out of sync)
+
+If Django’s memory is wrong, we reset it safely → telling Django:
+"This is your new memory of the migrations history; take it as the base and update from here."
+
+What Is Reality?
+
+Reality is the current set of migration files in your app’s migrations folder, starting from the latest applied migration (e.g., 0003_initial) onward.
+These files represent the intended schema changes in your code.
+
+How Django Remembers History
+Django creates a django_migrations table in the database.
+It stores applied migration names like 0001_initial, 0002_some_changes,etc...
+When you run migrate, Django checks:
+If a migration file (and the file_name) exists in code but is not recorded, Django applies it,and update the django_migrations with an added record.
+If it’s already recorded, Django skips it.
+So...
+Migrations are just history—a record of changes applied.
+If history is out of sync, you can fake the initial migration to align Django’s memory with reality (your app reality) without touching the schema:
+python manage.py migrate --fake-initial
+
+Let's create a migration plan with the below example scenarios  
+Note I will be taking example of the development branch and explain, it applies for main branch or any branch whose code is directly in sync with the deployed app on server 
+Scenario 1: Migration History Is Missing or Unreliable (Most Common)
+Imagine this setup:
+Production Server + its DB = main branch code — live app, source of truth; app breaks if out of sync. 
+Development Server + its DB = development branch code — always in sync with the dev server; app breaks if not. 
+Why Does This Matter for Migrations?
+
+You want to wipe out the Django migration history from both the deployed app commit and the DB (django_migrations). But how do you know it’s safe to do this without breaking anything? 
+
+Answer:
+
+The last commit in your development branch (or main branch) is the exact same code running on your dev or production server. (we know it because we deployed it)
+This means:
+
+The models in your development branch are in sync with the current database schema.
+If they weren’t in sync, the app would break! 
+Migration Strategy/Plan: Reset History, Not Reality
+
+We do not touch: Tables, Data, Schema
+We only reset: Migration files, Migration history in the app that is getting sourced.
+This creates a clean slate
+
+Why This Is Safe
+
+After cleanup: Django knows nothing, DB knows nothing, we know the truth: the app works (the app on the dev server is from the latest dev branch commit and doesn't break.)
+
+How It Works
+
+makemigrations, migrate --fake-initial
+
+Use --fake-initial to teach Django the truth again:
+Fake Initial Migration = “Trust the existing schema models”
+This tells Django: “Assume the DB schema already matches these models defined in the app”
+Now Django’s memory matches reality. And we know the current deployed app version/commit that we are syncing the history with is the reality.
+
+
+
+
+Understanding and Executing the Migrations Plan
+Step 1: Sync the development Branch (or the branch/commit; the code that's deployed; in our case its "development" ) 
+git checkout development
+git pull
+
+
+We always start from development because:
+
+It is deployed
+It is working
+Its DB schema is therefore correct
+Step 2: Inspect Migration History in the DB (Safety Check)
+select * from django_migrations where app = 'my_app_name';
+
+
+Purpose:
+
+Understand what Django thinks is applied
+Confirm before deleting anything
+Step 3: Delete Migration History (DB Only)
+delete from django_migrations where app = 'my_app_name';
+
+
+Important clarity:
+
+This does NOT delete tables
+This does NOT alter table or schema
+This only deletes Django’s memory of migrations
+Step 4: Reset the Migrations Folder
+
+Inside:
+
+my_app_name/migrations/
+
+
+Delete all migration files
+Keep only:
+
+__init__.py
+
+
+Reason:
+
+We don’t trust existing migration files
+We are starting from a known-good state
+Step 5: Create a Fresh Initial Migration
+uv run manage.py makemigrations my_app_name
+
+
+This creates:
+
+0001_initial.py
+
+
+This file now represents:
+
+“The current models exactly as they already exist in the database.” We know it because that's the models from the app commit, which is deployed, in our example the development branch latest
+Step 6: Fake the Initial Migration
+uv run manage.py migrate --fake-initial my_app_name
+
+
+What happens here:
+
+Django checks that tables already exist
+Django records 0001_initial as applied
+No SQL is executed (only the record in the django_migrations table is inserted; which is the history)
+
+Result:
+
+Migration files, Migration history, Actual DB schema
+are now perfectly aligned
+Step 7: Switch to the Branch With Changes
+git checkout <feature-branch>
+
+
+Now:
+
+Model changes from the feature branch are active
+The clean 0001_initial.py still exists from the development branch which is perfectly aligned with db , Now we can layer the further changes made on top of it 
+⚠️ Critical Git Note (Very Important)
+
+This approach works because:
+
+The migrations folder is not tracked in .gitignore
+0001_initial.py exists in both branches
+Feature branch builds on the same baseline
+
+If migrations were tracked:
+
+Branch switching could overwrite migration history folder
+Strategy must change
+
+Always confirm how migrations are handled in Git.
+
+Step 8: Create the Next Migration
+uv run manage.py makemigrations my_app_name
+
+
+This creates:
+
+0002_*.py
+
+
+This migration represents only the delta/model change between:
+
+The known-good baseline
+Your new model changes
+Step 9: Review Before Migrating (Critical)
+
+Inspect the migration file
+Ensure:
+
+Expected operations only
+No accidental drops or renames
+
+Review generated SQL
+
+uv run manage.py sqlmigrate my_app_name 0002
+
+
+Review migration plan
+
+uv run manage.py migrate --plan my_app_name
+
+
+This tells you exactly what will happen.
+
+Step 10: Deploy and Apply Migration
+uv run manage.py migrate my_app_name
+
+Step 11: Verify
+App behavior
+Database schema
+No runtime errors
+
+Now sit back and relax.
+
+Final One-Line Mental Model
+
+The database schema is the truth.
+Django migrations are just its memory.
+When the memory is wrong, reset it and fake it back correctly.  ...but only if the deployed app’s commit and DB schema match the branch and commit you're using to reset, ensuring the baseline is in sync with the current DB state and functioning properly.
+
+Scenario 2: Migration History Is Already Clean
+
+This is the easy case.
+
+Conditions:
+django_migrations entries match migration files
+No drift between DB and code
+Action:
+uv run manage.py migrate
+
+
+Just review and proceed. 

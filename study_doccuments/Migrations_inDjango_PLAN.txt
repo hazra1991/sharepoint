@@ -1,0 +1,143 @@
+MIGRATIONS PLAN:
+
+=====================
+
+sync the deve branch db django_migration same as the branch migratinos files  
+
+git checkout developmen
+git pull
+select * from django_migration where app='dynbootfile'; # this to besure before deleting the migration hisfrtry from DB 
+delete from django_migration where app='dynbootfile' ; # deletes the current migratinos histry 
+
+uv run manage.py makemigrations dynbootfile  # run this after removing and clearing the migrations folder (just leave __init__.py)
+
+uv run manage.py migrate --fake-initial dynbootfile  # this fakes the initial migratinos , donot migrate but syncts the migratinos history in django_mirgatinos (its check if table exist created)
+
+
+
+
+git checkout to the branch where the file exists 
+
+uv run manage.py makemigrations dynbootfile  # create  the second migrations file as changes on the initial
+
+inspect the migratinos files 
+
+uv run manage.py sqlmigrate dynbootfile 0002  # this give the entire sql needed to be run
+
+
+uv run manage.py migrate --plan dynbootfile # gives the migrations plan what will change
+
+then deploy the app 
+
+the migrate 
+
+uv run manage.py migrate dynbootfile
+
+verify 
+
+
+===============================================================================
+
+=========================== how to understand and aproach and manage multiple migrations across branches(the engineering aspect)  ==============================================
+
+Lets us consider two senarios 
+1) we dont have migrations history (history is not tracked)
+2) we  have the mirgration history  (history is traked)
+
+
+Before moving there we must be on same mindset that migratinos only will be a practical thing if our Django app is deployed ..(if its all local do whatever you like  :D )
+now lets understand with an example
+
+we have a development server and its DB and a productions server and its DB  and respective branches as development and main in git.
+
+NOw lets consider we are working on a feature and we want to test or initgrate that feature to the development branh and deploy and test in the development server
+
+so what we do we take the development branch , create a feature branch and start working
+no we make lot of model changes to the feature branch . -->> till here we are fine 
+
+now comes the part where we need to intigrate or merge the feature branh to development branch 
+
+TIll here we know application that is present in the development branch is in sync with the application deployed and the DB ...
+
+-> now lets consider  the scenario in whih the migrations scripts are not available (and this is a good scenario in our case becase it is alway true that if the development server is running and working then the development branch and all itsmodels are in sync [as the pipeline alway deploys whenever anytng come to main and dvelopment branch es ])
+
+in this senario how do we plan (thisis just and idea) we already know the existing app that is running is in sync with the development branch 
+
+so we do git checkout development 
+then go to the app in which we have made changes , remove the migrations files (if any exists because we dont know if its the ccorrect one we are starting fresh)
+then we also remove all the migration history from the development server DB as well 
+
+For Django -->> we search for out app in django_migrations  (select * from django_migration where app='my_appname') and then delete the entries like delete from django_migration where app='my_appnane'
+
+the above was a cleenup part and now the situation is or the goal we are trying to ahive is removing the entire migrations history(not the db tables or migrations or data only the history) from both out development branch and the DB it is deployned on ..
+
+
+by doing so what we achived ......  the babove 
+NOw this part is crusial --->  Beacuse we are now in a situation where we are starting from a clean slate i.e the db dont know the migrations history, the app dont know the migrations history  but we know that the current state of the models and the app is properly in sync with the deployed app and the DB server (obiusly because the development branh  its working and its deployed ,that how we know it  ,, we made changes to the feature branch not the development branch, if the db models and the development branch were out of sync then then app and pages would not been working :D )
+
+so now we can fake the migration to make the clean slate histry or db and the development app migration folder and bring them on the same page  .... how do we do it 
+(the below commands we can use uv run or python anythng you like)
+
+uv run manage.py makemigrations my_appname  (note its very wise to provide the app_name because we dont wnat to create any issue with other apps we are jsut concerned for ours)
+	the above will now create the 0001_initial.py  migrations file (thats good we want to syc the histo now )
+	
+now just fake the initial migration
+
+uv run manage.py migrate --fake-initial my_appname   (once this is complete the db history are now in sync)
+
+now comes the amezing part ,,, As we alreadyknow that the initial migratinos file we have in our histry(that we just created above) is in sync with the DB migrations history(again we didnit jst before)  we can now safely tell that our changes that we are going to migrate will be apply on top of the initial migration (this is the end goal)
+
+
+sp we come to the feature brnach 
+
+git checkout feature --->>> this brings all the changes in feature to life and now a new migration acn be created on top of the initial migration using the updated models 
+
+			A very imp note here we wewre abaole to do so because in the .gitignore we are not tracking the migratino folder hence whatever created in migrations folder in development branch stays in feature branch as well else it would have been ove written ,,,,   name a note and work accordingly.
+
+now int the feature branch 
+
+uv run manage.py makemigrations my_appname    ->> tis applyes the new changes on top of the 0001_initial.py in migrations folder (which we already faked and synced witht the radl development DB)
+
+after that we can chekc what are goint to get migrated like using the below commands think if those are needed review it and then procceed for the real migration 
+some review commands
+uv run manage.py sqlmigrate  my_appname 
+uv run manage.py migrate --plan  my_appname 
+
+the finally migrate 
+
+uv run manage.py migrate my_appname
+
+
+
+
+2) we  have the mirgration history ----> its simple just review the file present inthe django_migration table matches with the file in our migratinos table and then migrate
+
+
+=====================================================================
+
+
+now the issue is commig the nullable fils are not rechange 
+
+/api/dynbootfile/provisioning/registrations   :- line number 117 file /home/ahazra/workspace/cpetools/cpetools_api/src/dynbootfile/provisioning/schemas.py
+ obj.phone_number_1.kamailio_domain.fqdn if obj.phone_number_1 else None     here kamailio_domain is null which need to be fixed (data needs to be populated and then the the field should be no_null)   same is happing in the admin page as well
+
+
+kamailio_domain filed in SKU , phonenumber should be marked as no null
+
+sipservre_endpoint in provisinoing should be masked as not null 
+
+
+
+
+
+kamailio_dict = {number:fqdn for number,fqdn in kamailio_pairs}
+                for number_obj in local_numbers:
+                    number  = number_obj.number
+                    fqdn  =  kamailio_dict.get(number)
+                    if not number:
+                        print(f" local number not therer int the kamailio server {number}")
+                    else:
+                        kamailio_domains = KamailioDomain.objects.filter(fqdn=fqdn)
+                        if kamailio_domains:
+                            number_obj.kamailio_domain = kamailio_domains[0]
+                            number_obj.save()

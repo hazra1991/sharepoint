@@ -1,0 +1,12 @@
+You must output RAW Markdown only.
+
+Requirements:
+- Do NOT render, interpret, or format the content.
+- Preserve all Markdown syntax literally, including inner ``` code fences.
+- Wrap the entire output in an OUTER fenced block using four backticks (````).
+- Inner Markdown code blocks MUST remain as literal ``` blocks.
+- No explanations, no commentary, no extra text outside the outer fence.
+- The result must be copyable in one click and pasteable as a valid .md file.
+
+Task:
+Convert the provided text into Markdown while preserving all examples, code blocks, and semantics exactly.

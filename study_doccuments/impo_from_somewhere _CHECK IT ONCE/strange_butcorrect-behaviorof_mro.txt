@@ -1,0 +1,102 @@
+The line "my classs called" is part of the __init__ method of the Myclas class. This means it will only print when you create an instance of that class. Your previous code didn't print it because your super() call was misconfigured.
+
+To make it print, you need to create an instance of the child class, and the super() call in the child class's __init__ method needs to be correct.
+
+The super() call in your child class was incorrect because it used the explicit syntax super(Myclas, s) which starts the search for the __init__ method after Myclas in the inheritance chain. Because of this, it skipped Myclas and went to the object class, which has no print statement.
+
+To fix this and print "my classs called", you need to use a correct super() call.
+
+Correcting the Code for Printing
+You can achieve this in two main ways, depending on your desired outcome:
+
+Call the parent classes in the correct order. The standard practice is to use super() to call the parent classes in their Method Resolution Order (MRO).
+
+Python
+
+class Myclas:
+    def __init__(self):
+        print("my classs called")
+
+class Myclass2:
+    def __init__(self):
+        print("my class2 called")
+
+class child(Myclass2, Myclas):
+    def __init__(self):
+        super().__init__()
+        print("child")
+
+# This will print "my class2 called" and then "child" because Myclass2 is first in the MRO.
+# It will not print "my classs called" unless you explicitly call its __init__ method.
+Explicitly call the __init__ of Myclas. If you specifically want to run the __init__ method of Myclas and not Myclass2, you can call it directly.
+
+Python
+
+class Myclas:
+    def __init__(self):
+        print("my classs called")
+
+class Myclass2:
+    def __init__(self):
+        print("my class2 called")
+
+class child(Myclass2, Myclas):
+    def __init__(self):
+        Myclas.__init__(self) # This directly calls the method on the Myclas class
+        print("child")
+
+# This will print "my classs called" and then "child".
+# This method is less common in modern Python as it bypasses the cooperative nature of super().
+
+
+cant i use super(Myclas,self).__init__() ??? and why
+
+
+Yes, you can use super(Myclas, self).__init__(), but it won't work the way you expect in your example, which is why it didn't print "my classs called".
+
+The reason is that super(Myclas, self).__init__() is telling Python to start its search for the __init__ method after Myclas in the Method Resolution Order (MRO). Since Myclas is the last class in your inheritance chain before object, there are no other parent classes for super() to call.
+
+Understanding the MRO
+When a class inherits from multiple parents, Python determines a specific search order for methods. For your child(Myclass2, Myclas) class, the MRO is:
+
+child
+
+Myclass2
+
+Myclas
+
+object
+
+The super() function works by finding the next class in this order.
+
+super() (without arguments) in child's __init__ will call Myclass2.__init__() because Myclass2 is the next class in the MRO.
+
+super(Myclass2, self).__init__() would call Myclas.__init__() because it tells super() to look for a method right after Myclass2 in the MRO.
+
+However, when you use super(Myclas, self).__init__(), you are specifically telling Python to look for a method after Myclas in the MRO. The only class left is object, which doesn't have your print statement. This is why nothing is printed.
+
+The Correct Way to Use super()
+To correctly use super() and ensure that all parent methods are called, you should use the modern, argument-less syntax and call it in each class's __init__ method. This creates a chain of calls up the inheritance hierarchy.
+
+Python
+
+class Myclas:
+    def __init__(self):
+        print("my classs called")
+        super().__init__() # Calls object's __init__
+
+class Myclass2:
+    def __init__(self):
+        print("my class2 called")
+        super().__init__() # Calls Myclas's __init__
+
+class child(Myclass2, Myclas):
+    def __init__(self):
+        print("child called")
+        super().__init__() # Calls Myclass2's __init__
+
+# The output would be:
+# child called
+# my class2 called
+# my classs called
+By adding super().__init__() to each class, you create a chain that cooperatively calls each parent's __init__ method in the correct MRO. This is the correct way to handle method calls in multiple inheritance.

@@ -1,0 +1,188 @@
+# 📝 Django Validators – Complete Reference
+
+## 1️⃣ What are validators?
+
+Validators are callable functions or objects that check if a field’s value is valid.
+
+They raise `ValidationError` if the value is invalid.
+
+Can be attached to:
+
+- Individual fields: `validators=[...]`
+- ModelForms: automatically included
+
+Example use cases:
+
+- Ensure a number is positive
+- Ensure a JSON field contains only strings
+- Check email domain
+
+---
+
+## 2️⃣ Field vs Model validation
+
+| Validation Type       | Where it is defined                      | When it runs                                         |
+|-----------------------|-----------------------------------------|----------------------------------------------------|
+| Field validators       | `validators=[...]` in a model field    | Called by `field.clean()` inside `Model.full_clean()` |
+| Model-level validation | `model.clean()`                        | Called after all field validators, for cross-field logic |
+| Unique constraints     | `unique=True` or `Meta.unique_together`| Checked after field + model validation            |
+
+---
+
+## 3️⃣ Writing a simple validator
+
+Suppose we want a JSON field that only allows list of strings:
+
+```python
+from django.core.exceptions import ValidationError
+
+def validate_list_of_strings(value):
+    if not isinstance(value, list):
+        raise ValidationError("Value must be a list")
+    for i, item in enumerate(value):
+        if not isinstance(item, str):
+            raise ValidationError(f"Item at index {i} must be a string")
+```
+
+- **Input:** value from the model instance  
+- **Output:** Raises `ValidationError` if invalid, nothing if valid
+
+Can also be a callable class:
+
+```python
+class ListOfStringsValidator:
+    def __call__(self, value):
+        if not isinstance(value, list):
+            raise ValidationError("Value must be a list")
+        for i, item in enumerate(value):
+            if not isinstance(item, str):
+                raise ValidationError(f"Item at index {i} must be a string")
+```
+
+Both function and class work as validators.
+
+---
+
+## 4️⃣ Attaching the validator to a field
+
+```python
+from django.db import models
+
+class Command(models.Model):
+    allowed_options = models.JSONField(
+        default=list,
+        validators=[validate_list_of_strings],  # ⚡ Field validator attached here
+        help_text="List of allowed options for this command"
+    )
+```
+
+---
+
+## 5️⃣ How Django executes validators internally
+
+### Step 1 – `full_clean()` on the model instance
+
+```python
+cmd = Command(allowed_options=["--force", "--verbose"])
+cmd.full_clean()
+```
+
+### Step 2 – `full_clean()` calls `clean_fields()`
+
+```python
+for field in model._meta.get_fields():
+    value = getattr(model, field.attname)
+    field.clean(value, model_instance=model)
+```
+
+### Step 3 – `field.clean(value, model_instance)` executes
+
+- Converts value to Python type: `to_python(value)`
+- Runs built-in validations: `validate(value, model_instance)`  
+  Examples: `max_length`, `blank`, `choices`
+- Runs custom validators: `run_validators(value)`
+
+```python
+def run_validators(self, value):
+    for validator in self.validators:
+        validator(value)  # ⚡ Your function/class is called here
+```
+
+✅ That’s where `validate_list_of_strings` executes.
+
+### Step 4 – `model.clean()` runs
+
+After all fields are validated:
+
+```python
+def clean(self):
+    if self.some_field > self.other_field:
+        raise ValidationError("some_field cannot be greater than other_field")
+```
+
+- Only for cross-field or model-level checks
+
+### Step 5 – `validate_unique()`
+
+Finally, Django checks any unique constraints (`unique=True` or `unique_together`)  
+- Raises `ValidationError` if violated
+
+---
+
+## 6️⃣ Full Flow Diagram
+
+```
+instance.full_clean()
+   ├─> clean_fields()
+   │     └─> field.clean(value, instance)
+   │           ├─> to_python(value)
+   │           ├─> validate(value)       # built-in field checks
+   │           └─> run_validators(value) # your custom validators called here
+   │
+   ├─> model.clean()                       # cross-field or model-level validation
+   └─> validate_unique()                   # unique constraints
+```
+
+> Important: `save()` alone does NOT call any validators. Always call `full_clean()` if saving programmatically.
+
+---
+
+## 7️⃣ Key Notes for Writing Validators
+
+- Always raise `ValidationError` for invalid input.
+- Do not return anything; if valid, just `pass`.
+- Can be a function or a callable class.
+- Field validators are run per field, model `clean()` is per model instance.
+- Validators run in `full_clean()`, not `save()`.
+
+---
+
+## 8️⃣ Quick Example Using Both Field and Model Validators
+
+```python
+class Command(models.Model):
+    command_label = models.CharField(max_length=128)
+    allowed_options = models.JSONField(
+        default=list,
+        validators=[validate_list_of_strings]
+    )
+
+    def clean(self):
+        # cross-field validation
+        if "force" in self.allowed_options and self.command_label.lower() == "reboot":
+            raise ValidationError("Cannot force reboot via this command")
+```
+
+- Field validator ensures `allowed_options` is valid  
+- Model `clean()` ensures logical rules between fields
+
+---
+
+## ✅ Summary
+
+- Field validators: run per field, inside `field.clean()`
+- Model `clean()`: run per instance, after fields are validated
+- `full_clean()` orchestrates field → model → unique validation
+- `save()` alone does not trigger validators
+- Always use `ValidationError` to indicate invalid data
+- Validators can be functions or callable classes

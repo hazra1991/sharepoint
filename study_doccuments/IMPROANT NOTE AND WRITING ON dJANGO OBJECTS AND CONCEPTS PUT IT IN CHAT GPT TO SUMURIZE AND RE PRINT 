@@ -1,0 +1,325 @@
+Why do you still see
+
+dynbootfile.SipServerEndpoint.None
+
+The core reason
+
+Django admin resolves list_display entries in this order:
+
+A model field with that name
+
+A callable on the model
+
+A callable on the ModelAdmin
+
+In your case:
+
+list_display = ("fqdn", "country_code", "sipserver_endpoint")
+
+
+If your model already has a field or related manager named sipserver_endpoint, Django finds that first and never calls your admin method.
+
+So instead of calling:
+
+def sipserver_endpoint(self, obj):
+
+
+Django is displaying the model attribute obj.sipserver_endpoint, whose __str__ ends up being:
+
+dynbootfile.SipServerEndpoint.None
+
+
+That’s why your @admin.display method is ignored.
+
+2️⃣ How to fix it (the correct way)
+
+Rename the admin method so it does not collide with the model field / related name.
+
+✅ Corrected admin code
+@admin.register(KamailioDomain, site=admin.site)
+class KamailioDomainAdmin(admin.ModelAdmin):
+    list_display = ("fqdn", "country_code", "sipserver_endpoints_display")
+    search_fields = ("fqdn", "country_code")
+    ordering = ("fqdn",)
+
+    @admin.display(description="Sip server endpoint")
+    def sipserver_endpoints_display(self, obj):
+        return ", ".join(
+            endpoint.label
+            for endpoint in obj.sipserver_endpoint.all()
+        )
+
+
+🔑 Important rule:
+list_display method names must not match model fields or relations.
+
+3️⃣ Why obj.sipserver_endpoint.all() works
+
+This tells us something important about your model.
+
+You likely have one of these in KamailioDomain:
+
+ManyToManyField
+sipserver_endpoint = models.ManyToManyField(SipServerEndpoint)
+
+OR ForeignKey with related_name
+class SipServerEndpoint(models.Model):
+    domain = models.ForeignKey(
+        KamailioDomain,
+        related_name="sipserver_endpoint",
+        on_delete=models.CASCADE,
+    )
+
+
+In both cases, Django gives you a RelatedManager, so:
+
+obj.sipserver_endpoint
+
+
+is not a single object, but a manager, and:
+
+obj.sipserver_endpoint.all()
+
+
+returns a queryset of SipServerEndpoint objects.
+
+4️⃣ Why obj.objects.sipserver_endpoints.all() is WRONG
+
+This is a common confusion.
+
+❌ This is invalid
+obj.objects.sipserver_endpoints.all()
+
+Because:
+
+objects exists only on models, not instances
+
+obj is an instance, not the model class
+
+Think of it like this:
+
+What	Purpose
+KamailioDomain.objects	Query all domains
+obj	One specific domain
+obj.sipserver_endpoint	Related objects for that domain
+
+So the correct access pattern is:
+
+obj.related_manager.all()
+
+
+NOT:
+
+obj.objects.related_manager.all()
+
+5️⃣ Why Django showed .None
+
+That string comes from:
+
+str(obj.sipserver_endpoint)
+
+
+Which means Django was trying to display the relation itself, not your formatted output.
+
+This only happens when:
+
+The admin method was ignored
+
+A field/relation with the same name was used instead
+
+✅ Summary
+What went wrong
+
+list_display name collided with a model field / related manager
+
+Django admin never called your method
+
+How to fix
+
+Rename the admin display method
+
+Use that new name in list_display
+
+Key rules to remember
+
+list_display prefers model attributes over admin methods
+
+Never name admin display methods the same as model fields
+
+Use obj.related_name.all() for reverse relations
+
+Never use obj.objects
+
+If you want, paste your KamailioDomain and SipServerEndpoint models and I’ll tell you exactly which relation you have and how to name it cleanly.
+
+if model is a lass and a class has objetcs , then a instance of the model will also have the objects isnt it its just programing and oops conept sisnt it  ??
+
+Great question — this is exactly where Django’s ORM differs from “pure” OOP intuition.
+
+Short answer: No.
+An instance of a Django model does NOT have objects, even though the model class does.
+
+Let’s unpack why, carefully and concretely.
+
+1️⃣ Why your OOP intuition seems right
+
+In classic OOP thinking, you might expect:
+
+“If a class has an attribute, instances should also see it.”
+
+Example in plain Python:
+
+class A:
+    x = 10
+
+a = A()
+print(a.x)  # works
+
+
+So it feels logical to expect:
+
+obj.objects
+
+
+to work if:
+
+class KamailioDomain(models.Model):
+    objects = models.Manager()
+
+
+But Django is not using objects as a normal attribute.
+
+2️⃣ What objects really is in Django
+
+objects is a descriptor-bound class-level manager, not a normal attribute.
+
+Conceptually:
+
+KamailioDomain.objects  # Manager bound to the MODEL
+
+
+This manager’s job is to:
+
+Create queries
+
+Return instances
+
+Talk to the database table
+
+It represents the table, not a row.
+
+That’s why it only exists on the class, not on the instance.
+
+3️⃣ Why instances must not have .objects
+
+If instances had .objects, this would make no logical sense:
+
+obj.objects.filter(country_code="CH")
+
+
+What would that mean?
+
+Filter relative to this row?
+
+Filter all rows?
+
+Filter related rows?
+
+So Django enforces a clean separation:
+
+Thing	Represents
+Model.objects	Database table
+obj	One database row
+4️⃣ How Django enforces this separation
+
+Internally, Django does something like:
+
+class ModelBase(type):
+    def __getattr__(cls, name):
+        if name == "objects":
+            return ManagerBoundToClass(cls)
+
+
+But for instances:
+
+obj.__dict__  # does NOT include "objects"
+
+
+So:
+
+KamailioDomain.objects  # ✅
+obj.objects             # ❌ AttributeError
+
+
+This is intentional, not accidental.
+
+5️⃣ Why related managers do exist on instances
+
+Now here’s the important contrast:
+
+obj.sipserver_endpoint
+
+
+This does exist on the instance.
+
+Why?
+
+Because:
+
+It represents a relationship from this row
+
+It’s a reverse relation manager
+
+Its scope is already limited to this instance
+
+So:
+
+obj.sipserver_endpoint.all()
+
+
+means:
+
+“Give me all SipServerEndpoint rows related to THIS KamailioDomain row.”
+
+This does make sense.
+
+6️⃣ Mental model that always works
+Think in database terms, not OOP terms
+Django expression	Meaning
+Model.objects	SQL: SELECT * FROM table
+obj	SQL: one row
+obj.related_set.all()	SQL: SELECT * FROM related WHERE fk = obj.id
+
+Once you think this way, everything clicks.
+
+7️⃣ Why this is still OOP-correct
+
+This does not violate OOP.
+
+Django is using:
+
+Encapsulation
+
+Descriptors
+
+Metaclasses
+
+Which are advanced OOP features.
+
+objects is not “data belonging to instances” — it’s behavior belonging to the class itself.
+
+8️⃣ One-sentence rule to remember
+
+Managers live on models, related managers live on instances.
+
+If you remember that, you’ll never mix them up again.
+
+If you want, I can:
+
+Show a pure Python analogys
+
+Show the actual Django source code
+
+Explain how custom managers fit into this model
+
+Just tell me 👍

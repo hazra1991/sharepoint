@@ -112,15 +112,14 @@ The architecture during fine-tuning:
 │    ("The cat sat", "A feline rested", similar)       │
 │    ("The cat sat", "Stock prices fell", different)   │
 │                                                      │
-│  For each pair:                                      │
+│  ONE encoder, TWO passes (same weights both times):  │
 │                                                      │
-│  Sentence A                    Sentence B            │
+│  Pass 1: Sentence A           Pass 2: Sentence B    │
 │      ↓                             ↓                 │
-│  ┌────────┐                   ┌────────┐            │
-│  │ BERT   │                   │ BERT   │            │
-│  │(shared │                   │(same   │            │
-│  │weights)│                   │weights)│            │
-│  └───┬────┘                   └───┬────┘            │
+│  ┌─────────────────────────────────────────┐        │
+│  │         ONE encoder (e.g., BERT)         │        │
+│  │         Same weights for both passes     │        │
+│  └─────────────────────────────────────────┘        │
 │      ↓                             ↓                 │
 │  Mean Pool                    Mean Pool              │
 │      ↓                             ↓                 │
@@ -136,8 +135,9 @@ The architecture during fine-tuning:
 │   If different:     loss = max(0, sim(A,B) - margin) │
 │                     (push apart)                     │
 │                 ↓                                     │
-│         Backprop through BOTH encoders               │
-│         (same weights, so gradients accumulate)      │
+│         Backprop through the encoder                 │
+│         (gradients from both passes accumulate       │
+│          on the same weights)                        │
 │                 ↓                                     │
 │         Adam updates the encoder weights             │
 │                                                      │
@@ -146,8 +146,9 @@ The architecture during fine-tuning:
 │    similar sentences ARE close and different ARE far. │
 └─────────────────────────────────────────────────────┘
 ```
+**Note:**  In practice, both sentences are often processed in the same batch for efficiency — but conceptually, it's the same model processing two different inputs. and the **`backpropagation sends the updates bact to bother the passes`**
 
-**This is the key:** The fine-tuning adjusts the BERT weights so that the mean-pooled output naturally clusters similar sentences together in vector space. The transformer layers learn to produce representations where averaging them gives a meaningful sentence-level vector.
+**The key insight:** The encoder itself has no concept of "sentence similarity." It still does its normal job — process tokens, produce one contextualized vector per token. It doesn't know these vectors will be averaged or compared. But the fine-tuning loss flows backward *through* the mean pool *into* the encoder weights, shaping them so that as a side effect of normal token processing, the averaged vectors happen to capture sentence-level meaning. The encoder is still a token machine. The "magic" is just gradient descent working through the chain of operations.
 
 ```
 BEFORE fine-tuning (raw BERT):
